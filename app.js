@@ -70,6 +70,28 @@ function showMessage(message, type = 'error', duration = 5000){
     setTimeout(clearMessage, duration);
   }
 }
+async function createWelcomeTask(user){
+  if(!user) return;
+  const tasks = normalizeTasks(getLocalTasks()).filter(task => task.usuario_id === user.id);
+  if(tasks.length > 0) return;
+  const task = {
+    id: `welcome-${Date.now()}`,
+    usuario_id: user.id,
+    titulo: 'Primeira descoberta no Diário de Bordo',
+    descricao: 'Bem-vindo! Este é seu primeiro registro. Adicione fotos e detalhes para testar a sincronização.',
+    categoria: 'Introdução',
+    raridade: 'Comum',
+    favorito: false,
+    fotos: [],
+    criado_em: new Date().toISOString(),
+    sincronizado: navigator.onLine
+  };
+  saveLocalTask(task);
+  if(navigator.onLine){
+    await syncPending();
+  }
+  showMessage('Bem-vindo! Um registro inicial foi criado e será sincronizado.', 'success', 6000);
+}
 async function refreshSession(){
   const { data } = await supabase.auth.getSession();
   currentUserData = data?.session?.user || null;
@@ -326,6 +348,7 @@ signupBtn.addEventListener('click',async () => {
   }
   showMessage('Conta criada com sucesso. Verifique seu email se necessário.', 'success');
   currentUserData = data?.user || null;
+  await createWelcomeTask(currentUserData);
   refreshSession();
 });
 [signoutBtn, signoutHeaderBtn].forEach(button => button.addEventListener('click',async () => {
