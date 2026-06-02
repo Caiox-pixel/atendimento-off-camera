@@ -97,6 +97,9 @@ async function refreshSession(){
   currentUserData = data?.session?.user || null;
   updateNetworkStatus();
   setUserState(currentUserData);
+  if(currentUserData){
+    await createWelcomeTask(currentUserData);
+  }
   localTasks = normalizeTasks(getLocalTasks());
   render();
 }
@@ -349,9 +352,19 @@ signupBtn.addEventListener('click',async () => {
     showMessage(error.message, 'error');
     return;
   }
-  showMessage('Conta criada com sucesso. Verifique seu email se necessário.', 'success');
   currentUserData = data?.user || null;
-  await createWelcomeTask(currentUserData);
+  if(!data?.session){
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: emailInput.value,
+      password: passwordInput.value
+    });
+    if(signInError){
+      showMessage('Conta criada, mas não foi possível entrar automaticamente. ' + signInError.message, 'error');
+      return;
+    }
+    currentUserData = signInData?.user || currentUserData;
+  }
+  showMessage('Conta criada com sucesso e você foi autenticado.', 'success');
   refreshSession();
 });
 [signoutBtn, signoutHeaderBtn].forEach(button => button.addEventListener('click',async () => {
