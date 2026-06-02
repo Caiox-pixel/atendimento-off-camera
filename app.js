@@ -324,14 +324,17 @@ function setUserState(user){
     fetchRemoteTasks().then(syncPending).then(render);
   }
 }
-signinBtn.addEventListener('click',async event => {
+signinForm.addEventListener('submit',async event => {
   event.preventDefault();
   const { data, error } = await supabase.auth.signInWithPassword({
     email: emailInput.value,
     password: passwordInput.value
   });
   if(error){
-    showMessage(error.message, 'error');
+    const message = error.code === 'invalid_credentials'
+      ? 'Email ou senha inválidos. Verifique suas credenciais e tente novamente.'
+      : error.message;
+    showMessage(message, 'error');
     return;
   }
   currentUserData = data?.user || null;
