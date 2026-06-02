@@ -40,6 +40,7 @@ const stepPills = Array.from(document.querySelectorAll('.step-pill'));
 const stepPanes = Array.from(document.querySelectorAll('.step-pane'));
 let currentStep = 1;
 let currentUserData = null;
+let authRequestInFlight = false;
 const totalCount = document.getElementById('total-count');
 const comumCount = document.getElementById('comum-count');
 const raraCount = document.getElementById('rara-count');
@@ -124,6 +125,10 @@ function validateAuthInputs(){
     return false;
   }
   return true;
+}
+function setAuthButtonsDisabled(disabled){
+  signinBtn.disabled = disabled;
+  signupBtn.disabled = disabled;
 }
 function switchView(view){
   tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.view === view));
@@ -346,13 +351,20 @@ function setUserState(user){
 }
 signinForm.addEventListener('submit',async event => {
   event.preventDefault();
+  if(authRequestInFlight) return;
   if(!validateAuthInputs()) return;
+  authRequestInFlight = true;
+  setAuthButtonsDisabled(true);
   const { data, error } = await supabase.auth.signInWithPassword({
     email: emailInput.value.trim(),
     password: passwordInput.value
   });
+  authRequestInFlight = false;
+  setAuthButtonsDisabled(false);
   if(error){
-    const message = error.code === 'invalid_credentials'
+    const message = error.status === 429
+      ? 'Muitas tentativas. Aguarde alguns instantes e tente novamente.'
+      : error.code === 'invalid_credentials'
       ? 'Email ou senha inválidos. Verifique suas credenciais e tente novamente.'
       : error.message;
     showMessage(message, 'error');
@@ -362,7 +374,10 @@ signinForm.addEventListener('submit',async event => {
   refreshSession();
 });
 signupBtn.addEventListener('click',async () => {
+  if(authRequestInFlight) return;
   if(!validateAuthInputs()) return;
+  authRequestInFlight = true;
+  setAuthButtonsDisabled(true);
   const email = emailInput.value.trim();
   const password = passwordInput.value;
   const { data, error } = await supabase.auth.signUp({
@@ -370,7 +385,11 @@ signupBtn.addEventListener('click',async () => {
     password
   });
   if(error){
-    const message = error.status === 422
+    authRequestInFlight = false;
+    setAuthButtonsDisabled(false);
+    const message = error.status === 429
+      ? 'Muitas tentativas. Aguarde alguns instantes e tente novamente.'
+      : error.status === 422
       ? 'Cadastro inválido. Verifique o email e a senha.'
       : error.message;
     showMessage(message, 'error');
@@ -382,12 +401,16 @@ signupBtn.addEventListener('click',async () => {
       email,
       password
     });
+    authRequestInFlight = false;
+    setAuthButtonsDisabled(false);
     if(signInError){
       showMessage('Conta criada, mas não foi possível entrar automaticamente. ' + signInError.message, 'error');
       return;
     }
     currentUserData = signInData?.user || currentUserData;
   }
+  authRequestInFlight = false;
+  setAuthButtonsDisabled(false);
   showMessage('Conta criada com sucesso e você foi autenticado.', 'success');
   refreshSession();
 });
