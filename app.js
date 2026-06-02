@@ -108,6 +108,23 @@ function updateNetworkStatus(){
   networkStatus.textContent = online ? 'Online' : 'Offline';
   networkStatus.className = online ? 'status online' : 'status offline';
 }
+function validateAuthInputs(){
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if(!email || !password){
+    showMessage('Preencha email e senha para continuar.', 'error');
+    return false;
+  }
+  if(!/^\S+@\S+\.\S+$/.test(email)){
+    showMessage('Informe um email válido.', 'error');
+    return false;
+  }
+  if(password.length < 6){
+    showMessage('A senha precisa ter pelo menos 6 caracteres.', 'error');
+    return false;
+  }
+  return true;
+}
 function switchView(view){
   tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.view === view));
   registroPanel.classList.toggle('active', view === 'registro');
@@ -329,8 +346,9 @@ function setUserState(user){
 }
 signinForm.addEventListener('submit',async event => {
   event.preventDefault();
+  if(!validateAuthInputs()) return;
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: emailInput.value,
+    email: emailInput.value.trim(),
     password: passwordInput.value
   });
   if(error){
@@ -344,19 +362,25 @@ signinForm.addEventListener('submit',async event => {
   refreshSession();
 });
 signupBtn.addEventListener('click',async () => {
+  if(!validateAuthInputs()) return;
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
   const { data, error } = await supabase.auth.signUp({
-    email: emailInput.value,
-    password: passwordInput.value
+    email,
+    password
   });
   if(error){
-    showMessage(error.message, 'error');
+    const message = error.status === 422
+      ? 'Cadastro inválido. Verifique o email e a senha.'
+      : error.message;
+    showMessage(message, 'error');
     return;
   }
   currentUserData = data?.user || null;
   if(!data?.session){
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: emailInput.value,
-      password: passwordInput.value
+      email,
+      password
     });
     if(signInError){
       showMessage('Conta criada, mas não foi possível entrar automaticamente. ' + signInError.message, 'error');
