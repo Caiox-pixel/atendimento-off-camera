@@ -1,0 +1,12 @@
+{
+"name":"Tarefa Mobile",
+"short_name":"Tarefa",
+"start_url":"./",
+"display":"standalone",
+"background_color":"#f6f8fa",
+"theme_color":"#0b5fff",
+"icons":[
+{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"},
+{"src":"./icon-512.svg","sizes":"512x512","type":"image/svg+xml"}
+]
+}

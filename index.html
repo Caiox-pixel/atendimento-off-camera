@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.svg">
+<title>Diário de Bordo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+<div class="brand">
+<img src="./icon-192.svg" alt="Logo" class="logo">
+<div>
+<strong>Diário de Bordo</strong>
+<span>Registro de campo para exploradores</span>
+</div>
+</div>
+<div class="status-row">
+<span id="network-status" class="status offline">Offline</span>
+<button id="sync-button" class="secondary">Sincronizar</button>
+</div>
+</header>
+<main>
+<div id="message-container"></div>
+<section id="auth" class="card auth-card">
+<div class="section-title">Acesso ao Diário</div>
+<div id="user-info" class="user-info" hidden>
+<span id="user-email"></span>
+<button id="signout" class="secondary">Sair</button>
+</div>
+<form id="signin-form" class="form-grid">
+<input id="email" type="email" placeholder="Email" required>
+<input id="password" type="password" placeholder="Senha" required>
+<button id="signin" class="primary">Entrar</button>
+<button id="signup" type="button" class="secondary">Cadastrar</button>
+</form>
+</section>
+<section id="app" hidden>
+<div class="card card-nav">
+<div class="top-row">
+<div class="user-info">
+<span id="user-email-header"></span>
+<button id="signout-header" class="secondary">Sair</button>
+</div>
+<nav class="tabs" aria-label="Navegação principal">
+<button class="tab active" data-view="registro">Cadastro</button>
+<button class="tab" data-view="lista">Lista</button>
+<button class="tab" data-view="dashboard">Dashboard</button>
+<button class="tab" data-view="favoritos">Favoritos</button>
+</nav>
+</div>
+</div>
+<section id="registro-panel" class="panel active">
+<div class="card form-card">
+<div class="section-title">Novo Registro</div>
+<div class="steps">
+<span class="step-pill active">1. Cadastro</span>
+<span class="step-pill">2. Evidências</span>
+</div>
+<form id="note-form" class="form-grid">
+<div class="step-pane active" data-step="1">
+<input id="titulo" placeholder="Título da descoberta" required>
+<textarea id="descricao" rows="4" placeholder="Descrição detalhada" required></textarea>
+<input id="categoria" placeholder="Categoria taxonômica / geológica" required>
+<select id="raridade" required>
+<option value="Comum">Comum</option>
+<option value="Rara">Rara</option>
+<option value="Muito Rara">Muito Rara</option>
+</select>
+</div>
+<div class="step-pane" data-step="2">
+<div class="photo-group">
+<label for="fotos">Capture evidências visuais (até 3)</label>
+<input id="fotos" type="file" accept="image/*" capture="environment" multiple>
+<div id="photo-preview" class="photo-preview"></div>
+</div>
+</div>
+<div class="form-actions">
+<button type="button" id="prev-step" class="secondary" hidden>Voltar</button>
+<button type="button" id="next-step" class="secondary">Próximo</button>
+<button id="save" class="primary" hidden>Salvar registro</button>
+</div>
+</form>
+</div>
+</section>
+<section id="lista-panel" class="panel">
+<div class="card">
+<div class="section-title">Registros</div>
+<div class="filter-row">
+<input id="search" type="search" placeholder="Buscar por título, descrição ou categoria">
+<select id="filter-raridade">
+<option value="">Todas as raridades</option>
+<option value="Comum">Comum</option>
+<option value="Rara">Rara</option>
+<option value="Muito Rara">Muito Rara</option>
+</select>
+<button id="show-favorites" class="secondary">Apenas favoritos</button>
+</div>
+<ul id="notes" class="records-list"></ul>
+</div>
+</section>
+<section id="dashboard-panel" class="panel">
+<div class="card dashboard-grid">
+<div class="metric-card"><strong id="total-count">0</strong><span>Total de descobertas</span></div>
+<div class="metric-card"><strong id="comum-count">0</strong><span>Comum</span></div>
+<div class="metric-card"><strong id="rara-count">0</strong><span>Rara</span></div>
+<div class="metric-card"><strong id="muito-rara-count">0</strong><span>Muito rara</span></div>
+<div class="metric-card"><strong id="sync-count">0%</strong><span>Sincronizado</span></div>
+</div>
+</section>
+<section id="favoritos-panel" class="panel">
+<div class="card">
+<div class="section-title">Favoritos</div>
+<ul id="favorites" class="records-list"></ul>
+</div>
+</section>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
