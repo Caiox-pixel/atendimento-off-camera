@@ -41,6 +41,7 @@ const stepPanes = Array.from(document.querySelectorAll('.step-pane'));
 let currentStep = 1;
 let currentUserData = null;
 let authRequestInFlight = false;
+let authCooldown = false;
 const totalCount = document.getElementById('total-count');
 const comumCount = document.getElementById('comum-count');
 const raraCount = document.getElementById('rara-count');
@@ -127,8 +128,16 @@ function validateAuthInputs(){
   return true;
 }
 function setAuthButtonsDisabled(disabled){
-  signinBtn.disabled = disabled;
-  signupBtn.disabled = disabled;
+  signinBtn.disabled = disabled || authCooldown;
+  signupBtn.disabled = disabled || authCooldown;
+}
+function startAuthCooldown(duration = 10000){
+  authCooldown = true;
+  setAuthButtonsDisabled(true);
+  setTimeout(() => {
+    authCooldown = false;
+    setAuthButtonsDisabled(false);
+  }, duration);
 }
 function switchView(view){
   tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.view === view));
@@ -362,9 +371,12 @@ signinForm.addEventListener('submit',async event => {
   authRequestInFlight = false;
   setAuthButtonsDisabled(false);
   if(error){
-    const message = error.status === 429
-      ? 'Muitas tentativas. Aguarde alguns instantes e tente novamente.'
-      : error.code === 'invalid_credentials'
+    if(error.status === 429){
+      showMessage('Muitas tentativas. Aguarde 10 segundos e tente novamente.', 'error');
+      startAuthCooldown(10000);
+      return;
+    }
+    const message = error.code === 'invalid_credentials'
       ? 'Email ou senha inválidos. Verifique suas credenciais e tente novamente.'
       : error.message;
     showMessage(message, 'error');
@@ -387,9 +399,12 @@ signupBtn.addEventListener('click',async () => {
   if(error){
     authRequestInFlight = false;
     setAuthButtonsDisabled(false);
-    const message = error.status === 429
-      ? 'Muitas tentativas. Aguarde alguns instantes e tente novamente.'
-      : error.status === 422
+    if(error.status === 429){
+      showMessage('Muitas tentativas no cadastro. Aguarde 10 segundos e tente novamente.', 'error');
+      startAuthCooldown(10000);
+      return;
+    }
+    const message = error.status === 422
       ? 'Cadastro inválido. Verifique o email e a senha.'
       : error.message;
     showMessage(message, 'error');
