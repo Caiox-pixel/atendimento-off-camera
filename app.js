@@ -3,6 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const STORAGE_KEY = 'diario-exploradores-tarefas';
 const MAX_PHOTOS = 3;
+const STORAGE_BUCKET = 'tarefas-photos';
 const authSection = document.getElementById('auth');
 const appSection = document.getElementById('app');
 const signinForm = document.getElementById('signin-form');
@@ -257,6 +258,53 @@ async function preparePhotos(files){
   const chosen = Array.from(files || []).slice(0, MAX_PHOTOS);
   return Promise.all(chosen.map(file => resizeImage(file)));
 }
+
+function dataUrlToBlob(dataUrl){
+  const parts = dataUrl.split(',');
+  const meta = parts[0];
+  const b64 = parts[1];
+  const mimeMatch = meta.match(/data:(.+);base64/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const byteChars = atob(b64);
+  const byteNumbers = new Array(byteChars.length);
+  for(let i=0;i<byteChars.length;i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  return new Blob([new Uint8Array(byteNumbers)], { type: mime });
+}
+
+async function uploadDataUrlToStorage(dataUrl, userId){
+  try{
+    const blob = dataUrlToBlob(dataUrl);
+    const mime = blob.type || 'image/jpeg';
+    const ext = mime.split('/')[1].split('+')[0] || 'jpg';
+    const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2,9)}.${ext}`;
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {upsert:false});
+    if(error){
+      console.error('Erro upload:', error);
+      return null;
+    }
+    const { data: publicData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    return publicData?.publicUrl || null;
+  }catch(err){
+    console.error('uploadDataUrlToStorage error', err);
+    return null;
+  }
+}
+
+async function ensurePhotosStored(task){
+  const userId = task.usuario_id;
+  if(!userId) return task.fotos || [];
+  const fotos = Array.isArray(task.fotos) ? task.fotos : [];
+  const result = [];
+  for(const foto of fotos){
+    if(typeof foto === 'string' && foto.startsWith('data:')){
+      const uploaded = await uploadDataUrlToStorage(foto, userId);
+      if(uploaded) result.push(uploaded);
+    }else if(typeof foto === 'string'){
+      result.push(foto);
+    }
+  }
+  return result;
+}
 function updatePhotoPreview(files){
   photoPreview.innerHTML = '';
   Array.from(files || []).slice(0, MAX_PHOTOS).forEach(file => {
@@ -273,6 +321,8 @@ async function syncPending(){
   const tasks = normalizeTasks(getLocalTasks());
   const pending = tasks.filter(task => !task.sincronizado && task.usuario_id === user.id);
   for(const task of pending){
+    // Garantir que fotos em dataURLs sejam enviadas ao Storage e substituídas por URLs públicas
+    const fotosUrls = await ensurePhotosStored(task);
     const payload = {
       usuario_id: task.usuario_id,
       titulo: task.titulo,
@@ -280,12 +330,12 @@ async function syncPending(){
       categoria: task.categoria,
       raridade: task.raridade,
       favorito: task.favorito,
-      fotos: task.fotos,
+      fotos: fotosUrls,
       criado_em: task.criado_em
     };
     const {error} = await supabase.from('tarefas').insert([payload]);
     if(!error){
-      updateLocalTask(task.id, {sincronizado:true});
+      updateLocalTask(task.id, {sincronizado:true, fotos: fotosUrls});
     }
   }
   await fetchRemoteTasks();
@@ -453,6 +503,11 @@ noteForm.addEventListener('submit',async event => {
     return;
   }
   const fotos = await preparePhotos(photoInput.files);
+  let fotosToSave = fotos;
+  if(navigator.onLine){
+    const uploaded = await Promise.all(fotos.map(f => uploadDataUrlToStorage(f, user.id)));
+    fotosToSave = uploaded.map(u => u || '').filter(Boolean);
+  }
   const task = {
     id: `local-${Date.now()}`,
     usuario_id: user.id,
@@ -461,7 +516,7 @@ noteForm.addEventListener('submit',async event => {
     categoria: categoriaInput.value.trim() || 'Sem categoria',
     raridade: raridadeSelect.value,
     favorito: false,
-    fotos,
+    fotos: fotosToSave,
     criado_em: new Date().toISOString(),
     sincronizado: navigator.onLine
   };

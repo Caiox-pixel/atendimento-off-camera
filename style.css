@@ -118,6 +118,7 @@ button {
   background: #f8fafc;
   color: var(--text);
   border: 1px solid rgba(148,163,184,.3);
+  top: 10px;
 }
 .secondary:hover {
   background: #eff4ff;

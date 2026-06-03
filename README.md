@@ -26,6 +26,9 @@ Aplicação PWA para cadastro de descobertas de campo com suporte offline, regis
 2. Crie a tabela usando `atendimento-off-camera/supabase-schema.sql`.
 3. Copie a `URL` e a `public anon key` para `config.js`.
 4. Habilite Realtime/Auth no Supabase.
+5. Crie um bucket de Storage chamado `tarefas-photos` (ou atualize `app.js` com outro nome).
+	- No painel Supabase: Storage → Create new bucket → nome `tarefas-photos`.
+	- Defina como pública ou use URLs assinadas conforme sua política de segurança.
 
 ## Teste local
 Use um servidor estático no diretório `atendimento-off-camera`:
