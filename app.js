@@ -283,7 +283,12 @@ async function uploadDataUrlToStorage(dataUrl, userId){
       return null;
     }
     const { data: publicData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    return publicData?.publicUrl || null;
+    return {
+      publicUrl: publicData?.publicUrl || null,
+      path: data?.path || path,
+      size: blob.size,
+      contentType: blob.type
+    };
   }catch(err){
     console.error('uploadDataUrlToStorage error', err);
     return null;
@@ -300,7 +305,7 @@ async function ensurePhotosStored(task){
       const uploaded = await uploadDataUrlToStorage(foto, userId);
       if(uploaded) result.push(uploaded);
     }else if(typeof foto === 'string'){
-      result.push(foto);
+      result.push({ publicUrl: foto });
     }
   }
   return result;
@@ -322,7 +327,8 @@ async function syncPending(){
   const pending = tasks.filter(task => !task.sincronizado && task.usuario_id === user.id);
   for(const task of pending){
     // Garantir que fotos em dataURLs sejam enviadas ao Storage e substituídas por URLs públicas
-    const fotosUrls = await ensurePhotosStored(task);
+    const uploadedInfos = await ensurePhotosStored(task);
+    const fotosUrls = uploadedInfos.map(i => i.publicUrl).filter(Boolean);
     const payload = {
       usuario_id: task.usuario_id,
       titulo: task.titulo,
@@ -333,9 +339,24 @@ async function syncPending(){
       fotos: fotosUrls,
       criado_em: task.criado_em
     };
-    const {error} = await supabase.from('tarefas').insert([payload]);
-    if(!error){
+    const { data: insertData, error } = await supabase.from('tarefas').insert([payload]).select();
+    if(!error && insertData && insertData[0]){
+      const remoteId = insertData[0].id;
+      const fotosToInsert = uploadedInfos.map(info => ({
+        usuario_id: task.usuario_id,
+        tarefa_id: remoteId,
+        storage_path: info.path || null,
+        public_url: info.publicUrl || null,
+        tamanho: info.size || null,
+        content_type: info.contentType || null
+      })).filter(f => f.public_url);
+      if(fotosToInsert.length){
+        const { error: fotosErr } = await supabase.from('fotos').insert(fotosToInsert);
+        if(fotosErr) console.error('Erro inserindo metadados de fotos:', fotosErr);
+      }
       updateLocalTask(task.id, {sincronizado:true, fotos: fotosUrls});
+    }else{
+      console.error('Erro inserindo tarefa remota:', error);
     }
   }
   await fetchRemoteTasks();
@@ -506,7 +527,7 @@ noteForm.addEventListener('submit',async event => {
   let fotosToSave = fotos;
   if(navigator.onLine){
     const uploaded = await Promise.all(fotos.map(f => uploadDataUrlToStorage(f, user.id)));
-    fotosToSave = uploaded.map(u => u || '').filter(Boolean);
+    fotosToSave = uploaded.map(u => u?.publicUrl || '').filter(Boolean);
   }
   const task = {
     id: `local-${Date.now()}`,
