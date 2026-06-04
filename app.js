@@ -122,6 +122,23 @@ async function refreshSession(){
   localTasks = normalizeTasks(getLocalTasks());
   render();
 }
+
+// Garante que exista um registro de perfil para o usuário autenticado
+async function ensureUserProfile(user){
+  if(!user || !user.id) return;
+  try{
+    const profile = {
+      id: user.id,
+      email: user.email || null,
+      nome: (user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || null
+    };
+    // upsert para criar ou atualizar o perfil; 'returning: minimal' evita payloads grandes
+    const { error } = await supabase.from('usuarios').upsert([profile], { returning: 'minimal' });
+    if(error) console.warn('Erro ao gravar perfil de usuário:', error);
+  }catch(err){
+    console.warn('ensureUserProfile erro:', err);
+  }
+}
 function updateNetworkStatus(){
   const online = navigator.onLine;
   networkStatus.textContent = online ? 'Online' : 'Offline';
@@ -442,7 +459,10 @@ function setUserState(user){
   if(user){
     userEmail.textContent = user.email;
     userEmailHeader.textContent = user.email;
-    fetchRemoteTasks().then(syncPending).then(render);
+    ensureUserProfile(user).then(() => fetchRemoteTasks()).then(syncPending).then(render);
+  } else {
+    userEmail.textContent = '';
+    userEmailHeader.textContent = '';
   }
 }
 signinForm.addEventListener('submit',async event => {
