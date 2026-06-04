@@ -314,7 +314,13 @@ async function uploadDataUrlToStorage(dataUrl, userId){
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {upsert:false});
     if(error){
       console.error('Erro upload:', error);
-      showMessage('Erro no upload da foto: ' + (error.message || JSON.stringify(error)), 'error', 6000);
+      const message = error.message || JSON.stringify(error);
+      if(/row-level security|violates row-level security|policy/i.test(message)){
+        showMessage('Upload bloqueado por políticas do Storage. Verifique as permissões do bucket no Supabase.', 'error', 8000);
+        console.warn('Provável causa: Row Level Security no bucket. Use a seguinte policy no Supabase SQL Editor para permitir INSERT em storage.objects para o bucket "images" e usuários autenticados:\n\nCREATE POLICY allow_insert_images ON storage.objects\n  FOR INSERT\n  WITH CHECK (bucket_id = \'images\' AND auth.role() = \'authenticated\');\n');
+      } else {
+        showMessage('Erro no upload da foto: ' + message, 'error', 6000);
+      }
       return null;
     }
     // getPublicUrl retorna o URL público (se o bucket for público)
