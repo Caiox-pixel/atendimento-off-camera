@@ -314,9 +314,14 @@ async function uploadDataUrlToStorage(dataUrl, userId){
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {upsert:false});
     if(error){
       console.error('Erro upload:', error);
+      showMessage('Erro no upload da foto: ' + (error.message || JSON.stringify(error)), 'error', 6000);
       return null;
     }
-    const { data: publicData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    // getPublicUrl retorna o URL público (se o bucket for público)
+    const publicRes = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    // log completo para depuração
+    console.log('Upload success:', { path, data, publicRes });
+    const publicData = publicRes?.data || {};
     return {
       publicUrl: publicData?.publicUrl || null,
       path: data?.path || path,
@@ -325,6 +330,7 @@ async function uploadDataUrlToStorage(dataUrl, userId){
     };
   }catch(err){
     console.error('uploadDataUrlToStorage error', err);
+    showMessage('Erro inesperado no upload: ' + (err.message || err), 'error', 6000);
     return null;
   }
 }
