@@ -33,3 +33,35 @@ CREATE POLICY "atualizar_para_proprietario" ON public.tarefas
 CREATE POLICY "deletar_para_proprietario" ON public.tarefas
   FOR DELETE
   USING (auth.uid() = usuario_id);
+
+
+-- =====================================
+-- Tabela de perfis de usuário
+-- Guarda informações de perfil associadas ao Supabase Auth
+-- =====================================
+CREATE TABLE IF NOT EXISTS public.usuarios (
+  id uuid PRIMARY KEY,
+  email text NOT NULL UNIQUE,
+  nome text,
+  criado_em timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "selecionar_para_proprietario" ON public.usuarios
+  FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "inserir_para_autenticados" ON public.usuarios
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "atualizar_para_proprietario" ON public.usuarios
+  FOR UPDATE
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "deletar_para_proprietario" ON public.usuarios
+  FOR DELETE
+  USING (auth.uid() = id);

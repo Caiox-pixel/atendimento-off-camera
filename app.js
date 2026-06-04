@@ -633,5 +633,47 @@ supabase.auth.onAuthStateChange((event, session) => {
     render();
   }
 });
-refreshSession();
+// Limpa caches, service workers e tokens antigos no carregamento para evitar erros de refresh
+async function clearAppCacheOnLoad(){
+  // Atualiza estado de rede visível imediatamente
+  updateNetworkStatus();
+
+  // Desregistrar service workers
+  if('serviceWorker' in navigator){
+    try{
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }catch(err){ console.warn('Falha ao desregistrar service workers:', err); }
+  }
+
+  // Limpar Cache Storage
+  if('caches' in window){
+    try{
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }catch(err){ console.warn('Falha ao limpar caches:', err); }
+  }
+
+  // Remover chaves locais relacionadas ao app e supabase
+  try{
+    const toRemove = [];
+    for(let i = 0; i < localStorage.length; i++){
+      const key = localStorage.key(i);
+      if(!key) continue;
+      if(key === STORAGE_KEY || key.includes('supabase') || key.startsWith('sb-') || key.includes('sb:') || key.includes('supabase.auth')){
+        toRemove.push(key);
+      }
+    }
+    toRemove.forEach(k => localStorage.removeItem(k));
+  }catch(err){ console.warn('Falha ao limpar localStorage:', err); }
+
+  // Tentar limpar sessão no Supabase (ignora falhas offline)
+  try{ await supabase.auth.signOut(); }catch(err){ console.warn('supabase.signOut falhou:', err); }
+
+  // Recarregar estado da sessão após limpeza
+  await refreshSession();
+}
+
+// Executa limpeza no carregamento para evitar tokens/caches inválidos
+clearAppCacheOnLoad();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}
