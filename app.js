@@ -191,6 +191,35 @@ function normalizeTasks(tasks){
     fotos: Array.isArray(task.fotos) ? task.fotos : []
   }));
 }
+function isDirectPhotoSource(src){
+  return /^\s*(https?:|data:)/i.test(src);
+}
+async function resolveStoragePhoto(src){
+  if(!src || isDirectPhotoSource(src)) return src;
+  try{
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(src, 60 * 60 * 24);
+    if(error){
+      console.warn('Erro ao gerar signed URL para foto:', src, error);
+      return null;
+    }
+    return data?.signedUrl || null;
+  }catch(err){
+    console.warn('resolveStoragePhoto error:', err);
+    return null;
+  }
+}
+async function hydratePhotoThumbnails(){
+  const thumbs = Array.from(document.querySelectorAll('.photo-thumb[data-src]'));
+  await Promise.all(thumbs.map(async thumb => {
+    const src = thumb.dataset.src ? decodeURIComponent(thumb.dataset.src) : '';
+    if(!src) return;
+    if(isDirectPhotoSource(src)) return;
+    const resolved = await resolveStoragePhoto(src);
+    if(resolved){
+      thumb.style.backgroundImage = `url('${resolved}')`;
+    }
+  }));
+}
 function render(){
   const search = searchInput.value.trim().toLowerCase();
   const raridadeFilter = filterRaridade.value;
@@ -204,7 +233,11 @@ function render(){
     return passesSearch && passesRaridade && passesFavorites;
   });
   notesList.innerHTML = filtered.map(task => {
-    const images = task.fotos.slice(0,3).map(src => `<div class="photo-thumb" style="background-image:url('${src}')"></div>`).join('');
+    const images = task.fotos.slice(0,3).filter(Boolean).map(src => {
+      const encodedSrc = encodeURIComponent(src);
+      const style = isDirectPhotoSource(src) ? `style="background-image:url('${src}')"` : '';
+      return `<div class="photo-thumb" data-src="${encodedSrc}" ${style}></div>`;
+    }).join('');
     return `<li class="record-card">
       <h3>${escapeHtml(task.titulo)}</h3>
       <p>${escapeHtml(task.descricao)}</p>
@@ -234,6 +267,7 @@ function render(){
       </div>
     </li>`;
   }).join('');
+  hydratePhotoThumbnails();
   const total = tasks.length;
   const comum = tasks.filter(task => task.raridade === 'Comum').length;
   const rara = tasks.filter(task => task.raridade === 'Rara').length;
