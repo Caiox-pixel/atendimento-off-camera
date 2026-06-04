@@ -16,6 +16,7 @@ const userInfoHeader = document.getElementById('user-email-header');
 const userEmail = document.getElementById('user-email');
 const networkStatus = document.getElementById('network-status');
 const syncButton = document.getElementById('sync-button');
+const resetCacheBtn = document.getElementById('reset-cache');
 const tabs = Array.from(document.querySelectorAll('.tab'));
 const registroPanel = document.getElementById('registro-panel');
 const listaPanel = document.getElementById('lista-panel');
@@ -457,12 +458,12 @@ function setUserState(user){
   authSection.hidden = visible;
   appSection.hidden = !visible;
   if(user){
-    userEmail.textContent = user.email;
-    userEmailHeader.textContent = user.email;
+    if (userEmail) userEmail.textContent = user.email;
+    if (userInfoHeader) userInfoHeader.textContent = user.email;
     ensureUserProfile(user).then(() => fetchRemoteTasks()).then(syncPending).then(render);
   } else {
-    userEmail.textContent = '';
-    userEmailHeader.textContent = '';
+    if (userEmail) userEmail.textContent = '';
+    if (userInfoHeader) userInfoHeader.textContent = '';
   }
 }
 signinForm.addEventListener('submit',async event => {
@@ -672,6 +673,15 @@ async function clearAppCacheOnLoad(){
 
   // Recarregar estado da sessão após limpeza
   await refreshSession();
+}
+
+// Adiciona listener do botão manual para limpeza de cache/sessão
+if (resetCacheBtn) {
+  resetCacheBtn.addEventListener('click', async () => {
+    showMessage('Limpando cache e sessão...', 'info', 3000);
+    await clearAppCacheOnLoad();
+    showMessage('Cache limpo e sessão reiniciada.', 'success', 3000);
+  });
 }
 
 // Executa limpeza no carregamento para evitar tokens/caches inválidos
