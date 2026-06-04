@@ -646,7 +646,7 @@ supabase.auth.onAuthStateChange((event, session) => {
     render();
   }
 });
-// Limpa caches, service workers e tokens antigos no carregamento para evitar erros de refresh
+// Limpa apenas caches e service workers no carregamento, preservando dados do app e sessão ativa.
 async function clearAppCacheOnLoad(){
   // Atualiza estado de rede visível imediatamente
   updateNetworkStatus();
@@ -666,14 +666,18 @@ async function clearAppCacheOnLoad(){
       await Promise.all(keys.map(k => caches.delete(k)));
     }catch(err){ console.warn('Falha ao limpar caches:', err); }
   }
+}
 
-  // Remover chaves locais relacionadas ao app e supabase
+async function resetAppCacheAndSession(){
+  await clearAppCacheOnLoad();
+
+  // Remover chaves locais relacionadas ao Supabase, preservando os dados do app
   try{
     const toRemove = [];
     for(let i = 0; i < localStorage.length; i++){
       const key = localStorage.key(i);
       if(!key) continue;
-      if(key === STORAGE_KEY || key.includes('supabase') || key.startsWith('sb-') || key.includes('sb:') || key.includes('supabase.auth')){
+      if(key.includes('supabase') || key.startsWith('sb-') || key.includes('sb:') || key.includes('supabase.auth')){
         toRemove.push(key);
       }
     }
@@ -691,11 +695,11 @@ async function clearAppCacheOnLoad(){
 if (resetCacheBtn) {
   resetCacheBtn.addEventListener('click', async () => {
     showMessage('Limpando cache e sessão...', 'info', 3000);
-    await clearAppCacheOnLoad();
+    await resetAppCacheAndSession();
     showMessage('Cache limpo e sessão reiniciada.', 'success', 3000);
   });
 }
 
-// Executa limpeza no carregamento para evitar tokens/caches inválidos
+// Executa limpeza leve na inicialização para evitar service workers/caches antigos
 clearAppCacheOnLoad();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}
