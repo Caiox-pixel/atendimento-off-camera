@@ -323,13 +323,18 @@ async function uploadDataUrlToStorage(dataUrl, userId){
       }
       return null;
     }
-    // getPublicUrl retorna o URL público (se o bucket for público)
-    const publicRes = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    // log completo para depuração
-    console.log('Upload success:', { path, data, publicRes });
-    const publicData = publicRes?.data || {};
+    // Gera URL assinada para garantir acesso, mesmo se o bucket for privado.
+    const signedRes = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 60 * 24);
+    let publicUrl = signedRes.data?.signedUrl || null;
+    if(signedRes.error){
+      console.warn('Não foi possível gerar URL assinada:', signedRes.error);
+      const publicRes = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+      publicUrl = publicRes?.data?.publicUrl || null;
+    }
+
+    console.log('Upload success:', { path, data, publicUrl });
     return {
-      publicUrl: publicData?.publicUrl || null,
+      publicUrl,
       path: data?.path || path,
       size: blob.size,
       contentType: blob.type
