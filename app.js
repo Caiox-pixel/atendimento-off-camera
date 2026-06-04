@@ -3,7 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const STORAGE_KEY = 'diario-exploradores-tarefas';
 const MAX_PHOTOS = 3;
-const STORAGE_BUCKET = 'tarefas-photos';
+const STORAGE_BUCKET = 'images';
 const authSection = document.getElementById('auth');
 const appSection = document.getElementById('app');
 const signinForm = document.getElementById('signin-form');
@@ -11,7 +11,6 @@ const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const signupBtn = document.getElementById('signup');
 const signinBtn = document.getElementById('signin');
-const signoutBtn = document.getElementById('signout');
 const signoutHeaderBtn = document.getElementById('signout-header');
 const userInfoHeader = document.getElementById('user-email-header');
 const userEmail = document.getElementById('user-email');
@@ -96,11 +95,28 @@ async function createWelcomeTask(user){
   showMessage('Bem-vindo! Um registro inicial foi criado e será sincronizado.', 'success', 6000);
 }
 async function refreshSession(){
-  const { data } = await supabase.auth.getSession();
-  currentUserData = data?.session?.user || null;
   updateNetworkStatus();
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('Erro ao obter sessão Supabase:', error.message);
+      const refreshError = /refresh_token|invalid_grant|token/i.test(error.message || '') || error.status === 400;
+      if (refreshError) {
+        await supabase.auth.signOut();
+        currentUserData = null;
+      } else {
+        currentUserData = data?.session?.user || null;
+      }
+    } else {
+      currentUserData = data?.session?.user || null;
+    }
+  } catch (err) {
+    console.warn('Falha ao recuperar sessão Supabase:', err);
+    currentUserData = null;
+  }
+
   setUserState(currentUserData);
-  if(currentUserData){
+  if (currentUserData){
     await createWelcomeTask(currentUserData);
   }
   localTasks = normalizeTasks(getLocalTasks());
@@ -454,7 +470,10 @@ signinForm.addEventListener('submit',async event => {
     return;
   }
   currentUserData = data?.user || null;
-  refreshSession();
+  if(currentUserData){
+    setUserState(currentUserData);
+    render();
+  }
 });
 signupBtn.addEventListener('click',async () => {
   if(authRequestInFlight) return;
@@ -498,12 +517,15 @@ signupBtn.addEventListener('click',async () => {
   authRequestInFlight = false;
   setAuthButtonsDisabled(false);
   showMessage('Conta criada com sucesso e você foi autenticado.', 'success');
-  refreshSession();
+  if(currentUserData){
+    setUserState(currentUserData);
+    render();
+  }
 });
-[signoutBtn, signoutHeaderBtn].forEach(button => button.addEventListener('click',async () => {
+signoutHeaderBtn.addEventListener('click',async () => {
   await supabase.auth.signOut();
   refreshSession();
-}));
+});
 photoInput.addEventListener('change', () => updatePhotoPreview(photoInput.files));
 nextStepBtn.addEventListener('click', () => {
   if(validateStep1()){
@@ -582,6 +604,14 @@ favoritesList.addEventListener('click', event => {
 });
 window.addEventListener('online', async () => { updateNetworkStatus(); await syncPending(); render(); });
 window.addEventListener('offline', updateNetworkStatus);
-supabase.auth.onAuthStateChange(() => refreshSession());
+supabase.auth.onAuthStateChange((event, session) => {
+  currentUserData = session?.user || null;
+  setUserState(currentUserData);
+  if(currentUserData){
+    fetchRemoteTasks().then(syncPending).then(render);
+  } else {
+    render();
+  }
+});
 refreshSession();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}
