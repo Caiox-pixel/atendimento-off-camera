@@ -11,6 +11,7 @@ const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const signupBtn = document.getElementById('signup');
 const signinBtn = document.getElementById('signin');
+const forgotPasswordBtn = document.getElementById('forgot-password');
 const signoutBtn = document.getElementById('signout');
 const signoutHeaderBtn = document.getElementById('signout-header');
 const userInfoHeader = document.getElementById('user-email-header');
@@ -499,6 +500,26 @@ signupBtn.addEventListener('click',async () => {
   setAuthButtonsDisabled(false);
   showMessage('Conta criada com sucesso e você foi autenticado.', 'success');
   refreshSession();
+});
+forgotPasswordBtn.addEventListener('click', async () => {
+  const email = emailInput.value.trim();
+  if(!email){
+    showMessage('Informe seu email para receber o link de recuperação.', 'error');
+    return;
+  }
+  if(!/^\S+@\S+\.\S+$/.test(email)){
+    showMessage('Informe um email válido para recuperação de senha.', 'error');
+    return;
+  }
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
+  if(error){
+    const message = error.code === 'invalid_reset_token' ? 'Não foi possível enviar o email de recuperação. Tente novamente mais tarde.' : `${error.message} (${error.code})`;
+    showMessage(message, 'error');
+    return;
+  }
+  showMessage('Email de recuperação enviado. Verifique sua caixa de entrada.', 'success', 10000);
 });
 [signoutBtn, signoutHeaderBtn].forEach(button => button.addEventListener('click',async () => {
   await supabase.auth.signOut();
