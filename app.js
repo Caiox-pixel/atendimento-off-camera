@@ -11,11 +11,7 @@ const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const signupBtn = document.getElementById('signup');
 const signinBtn = document.getElementById('signin');
-<<<<<<< HEAD
 const forgotPasswordBtn = document.getElementById('forgot-password');
-const signoutBtn = document.getElementById('signout');
-=======
->>>>>>> 27efe7101872defdb7f6dabe8a57888bcb2bc31c
 const signoutHeaderBtn = document.getElementById('signout-header');
 const userInfoHeader = document.getElementById('user-email-header');
 const userEmail = document.getElementById('user-email');
@@ -48,6 +44,7 @@ let currentStep = 1;
 let currentUserData = null;
 let authRequestInFlight = false;
 let authCooldown = false;
+let currentPhotoFiles = [];
 const totalCount = document.getElementById('total-count');
 const comumCount = document.getElementById('comum-count');
 const raraCount = document.getElementById('rara-count');
@@ -196,6 +193,13 @@ function normalizeTasks(tasks){
     fotos: Array.isArray(task.fotos) ? task.fotos : []
   }));
 }
+function normalizePhotoList(items){
+  return Array.isArray(items)
+    ? items.map(item => typeof item === 'string' ? item : item?.publicUrl || item?.public_url || '')
+        .filter(Boolean)
+        .slice(0, MAX_PHOTOS)
+    : [];
+}
 function isDirectPhotoSource(src){
   return /^\s*(https?:|data:)/i.test(src);
 }
@@ -238,7 +242,7 @@ function render(){
     return passesSearch && passesRaridade && passesFavorites;
   });
   notesList.innerHTML = filtered.map(task => {
-    const images = task.fotos.slice(0,3).filter(Boolean).map(src => {
+    const images = normalizePhotoList(task.fotos).map(src => {
       const encodedSrc = encodeURIComponent(src);
       const style = isDirectPhotoSource(src) ? `style="background-image:url('${src}')"` : '';
       return `<div class="photo-thumb" data-src="${encodedSrc}" ${style}></div>`;
@@ -485,6 +489,7 @@ function clearForm(){
   categoriaInput.value = '';
   raridadeSelect.value = 'Comum';
   photoInput.value = '';
+  currentPhotoFiles = [];
   photoPreview.innerHTML = '';
   currentStep = 1;
   updateStep();
@@ -620,14 +625,20 @@ forgotPasswordBtn.addEventListener('click', async () => {
   }
   showMessage('Email de recuperação enviado. Verifique sua caixa de entrada.', 'success', 10000);
 });
-[signoutBtn, signoutHeaderBtn].forEach(button => button.addEventListener('click',async () => {
-=======
 signoutHeaderBtn.addEventListener('click',async () => {
->>>>>>> 27efe7101872defdb7f6dabe8a57888bcb2bc31c
   await supabase.auth.signOut();
   refreshSession();
 });
-photoInput.addEventListener('change', () => updatePhotoPreview(photoInput.files));
+photoInput.addEventListener('change', () => {
+  const selected = Array.from(photoInput.files || []);
+  const remainingSlots = MAX_PHOTOS - currentPhotoFiles.length;
+  if(selected.length > remainingSlots){
+    showMessage(`Você só pode adicionar até ${MAX_PHOTOS} fotos.`, 'error');
+  }
+  currentPhotoFiles = currentPhotoFiles.concat(selected).slice(0, MAX_PHOTOS);
+  updatePhotoPreview(currentPhotoFiles);
+  photoInput.value = '';
+});
 nextStepBtn.addEventListener('click', () => {
   if(validateStep1()){
     currentStep = 2;
@@ -646,7 +657,7 @@ noteForm.addEventListener('submit',async event => {
     showMessage('Faça login para criar descobertas.', 'error');
     return;
   }
-  const fotos = await preparePhotos(photoInput.files);
+  const fotos = await preparePhotos(currentPhotoFiles);
   let fotosToSave = fotos;
   if(navigator.onLine){
     const uploaded = await Promise.all(fotos.map(f => uploadDataUrlToStorage(f, user.id)));
