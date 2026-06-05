@@ -3,7 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const STORAGE_KEY = 'diario-exploradores-tarefas';
 const MAX_PHOTOS = 3;
-const STORAGE_BUCKET = 'tarefas-photos';
+const STORAGE_BUCKET = 'images';
 const authSection = document.getElementById('auth');
 const appSection = document.getElementById('app');
 const signinForm = document.getElementById('signin-form');
@@ -11,13 +11,17 @@ const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const signupBtn = document.getElementById('signup');
 const signinBtn = document.getElementById('signin');
+<<<<<<< HEAD
 const forgotPasswordBtn = document.getElementById('forgot-password');
 const signoutBtn = document.getElementById('signout');
+=======
+>>>>>>> 27efe7101872defdb7f6dabe8a57888bcb2bc31c
 const signoutHeaderBtn = document.getElementById('signout-header');
 const userInfoHeader = document.getElementById('user-email-header');
 const userEmail = document.getElementById('user-email');
 const networkStatus = document.getElementById('network-status');
 const syncButton = document.getElementById('sync-button');
+const resetCacheBtn = document.getElementById('reset-cache');
 const tabs = Array.from(document.querySelectorAll('.tab'));
 const registroPanel = document.getElementById('registro-panel');
 const listaPanel = document.getElementById('lista-panel');
@@ -97,15 +101,49 @@ async function createWelcomeTask(user){
   showMessage('Bem-vindo! Um registro inicial foi criado e será sincronizado.', 'success', 6000);
 }
 async function refreshSession(){
-  const { data } = await supabase.auth.getSession();
-  currentUserData = data?.session?.user || null;
   updateNetworkStatus();
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('Erro ao obter sessão Supabase:', error.message);
+      const refreshError = /refresh_token|invalid_grant|token/i.test(error.message || '') || error.status === 400;
+      if (refreshError) {
+        await supabase.auth.signOut();
+        currentUserData = null;
+      } else {
+        currentUserData = data?.session?.user || null;
+      }
+    } else {
+      currentUserData = data?.session?.user || null;
+    }
+  } catch (err) {
+    console.warn('Falha ao recuperar sessão Supabase:', err);
+    currentUserData = null;
+  }
+
   setUserState(currentUserData);
-  if(currentUserData){
+  if (currentUserData){
     await createWelcomeTask(currentUserData);
   }
   localTasks = normalizeTasks(getLocalTasks());
   render();
+}
+
+// Garante que exista um registro de perfil para o usuário autenticado
+async function ensureUserProfile(user){
+  if(!user || !user.id) return;
+  try{
+    const profile = {
+      id: user.id,
+      email: user.email || null,
+      nome: (user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || null
+    };
+    // upsert para criar ou atualizar o perfil; 'returning: minimal' evita payloads grandes
+    const { error } = await supabase.from('usuarios').upsert([profile], { returning: 'minimal' });
+    if(error) console.warn('Erro ao gravar perfil de usuário:', error);
+  }catch(err){
+    console.warn('ensureUserProfile erro:', err);
+  }
 }
 function updateNetworkStatus(){
   const online = navigator.onLine;
@@ -158,6 +196,35 @@ function normalizeTasks(tasks){
     fotos: Array.isArray(task.fotos) ? task.fotos : []
   }));
 }
+function isDirectPhotoSource(src){
+  return /^\s*(https?:|data:)/i.test(src);
+}
+async function resolveStoragePhoto(src){
+  if(!src || isDirectPhotoSource(src)) return src;
+  try{
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(src, 60 * 60 * 24);
+    if(error){
+      console.warn('Erro ao gerar signed URL para foto:', src, error);
+      return null;
+    }
+    return data?.signedUrl || null;
+  }catch(err){
+    console.warn('resolveStoragePhoto error:', err);
+    return null;
+  }
+}
+async function hydratePhotoThumbnails(){
+  const thumbs = Array.from(document.querySelectorAll('.photo-thumb[data-src]'));
+  await Promise.all(thumbs.map(async thumb => {
+    const src = thumb.dataset.src ? decodeURIComponent(thumb.dataset.src) : '';
+    if(!src) return;
+    if(isDirectPhotoSource(src)) return;
+    const resolved = await resolveStoragePhoto(src);
+    if(resolved){
+      thumb.style.backgroundImage = `url('${resolved}')`;
+    }
+  }));
+}
 function render(){
   const search = searchInput.value.trim().toLowerCase();
   const raridadeFilter = filterRaridade.value;
@@ -171,7 +238,11 @@ function render(){
     return passesSearch && passesRaridade && passesFavorites;
   });
   notesList.innerHTML = filtered.map(task => {
-    const images = task.fotos.slice(0,3).map(src => `<div class="photo-thumb" style="background-image:url('${src}')"></div>`).join('');
+    const images = task.fotos.slice(0,3).filter(Boolean).map(src => {
+      const encodedSrc = encodeURIComponent(src);
+      const style = isDirectPhotoSource(src) ? `style="background-image:url('${src}')"` : '';
+      return `<div class="photo-thumb" data-src="${encodedSrc}" ${style}></div>`;
+    }).join('');
     return `<li class="record-card">
       <h3>${escapeHtml(task.titulo)}</h3>
       <p>${escapeHtml(task.descricao)}</p>
@@ -201,6 +272,7 @@ function render(){
       </div>
     </li>`;
   }).join('');
+  hydratePhotoThumbnails();
   const total = tasks.length;
   const comum = tasks.filter(task => task.raridade === 'Comum').length;
   const rara = tasks.filter(task => task.raridade === 'Rara').length;
@@ -281,17 +353,34 @@ async function uploadDataUrlToStorage(dataUrl, userId){
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {upsert:false});
     if(error){
       console.error('Erro upload:', error);
+      const message = error.message || JSON.stringify(error);
+      if(/row-level security|violates row-level security|policy/i.test(message)){
+        showMessage('Upload bloqueado por políticas do Storage. Verifique as permissões do bucket no Supabase.', 'error', 8000);
+        console.warn('Provável causa: Row Level Security no bucket. Use a seguinte policy no Supabase SQL Editor para permitir INSERT em storage.objects para o bucket "images" e usuários autenticados:\n\nCREATE POLICY allow_insert_images ON storage.objects\n  FOR INSERT\n  WITH CHECK (bucket_id = \'images\' AND auth.role() = \'authenticated\');\n');
+      } else {
+        showMessage('Erro no upload da foto: ' + message, 'error', 6000);
+      }
       return null;
     }
-    const { data: publicData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    // Gera URL assinada para garantir acesso, mesmo se o bucket for privado.
+    const signedRes = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 60 * 24);
+    let publicUrl = signedRes.data?.signedUrl || null;
+    if(signedRes.error){
+      console.warn('Não foi possível gerar URL assinada:', signedRes.error);
+      const publicRes = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+      publicUrl = publicRes?.data?.publicUrl || null;
+    }
+
+    console.log('Upload success:', { path, data, publicUrl });
     return {
-      publicUrl: publicData?.publicUrl || null,
+      publicUrl,
       path: data?.path || path,
       size: blob.size,
       contentType: blob.type
     };
   }catch(err){
     console.error('uploadDataUrlToStorage error', err);
+    showMessage('Erro inesperado no upload: ' + (err.message || err), 'error', 6000);
     return null;
   }
 }
@@ -425,9 +514,12 @@ function setUserState(user){
   authSection.hidden = visible;
   appSection.hidden = !visible;
   if(user){
-    userEmail.textContent = user.email;
-    userEmailHeader.textContent = user.email;
-    fetchRemoteTasks().then(syncPending).then(render);
+    if (userEmail) userEmail.textContent = user.email;
+    if (userInfoHeader) userInfoHeader.textContent = user.email;
+    ensureUserProfile(user).then(() => fetchRemoteTasks()).then(syncPending).then(render);
+  } else {
+    if (userEmail) userEmail.textContent = '';
+    if (userInfoHeader) userInfoHeader.textContent = '';
   }
 }
 signinForm.addEventListener('submit',async event => {
@@ -455,7 +547,10 @@ signinForm.addEventListener('submit',async event => {
     return;
   }
   currentUserData = data?.user || null;
-  refreshSession();
+  if(currentUserData){
+    setUserState(currentUserData);
+    render();
+  }
 });
 signupBtn.addEventListener('click',async () => {
   if(authRequestInFlight) return;
@@ -499,8 +594,12 @@ signupBtn.addEventListener('click',async () => {
   authRequestInFlight = false;
   setAuthButtonsDisabled(false);
   showMessage('Conta criada com sucesso e você foi autenticado.', 'success');
-  refreshSession();
+  if(currentUserData){
+    setUserState(currentUserData);
+    render();
+  }
 });
+<<<<<<< HEAD
 forgotPasswordBtn.addEventListener('click', async () => {
   const email = emailInput.value.trim();
   if(!email){
@@ -522,9 +621,12 @@ forgotPasswordBtn.addEventListener('click', async () => {
   showMessage('Email de recuperação enviado. Verifique sua caixa de entrada.', 'success', 10000);
 });
 [signoutBtn, signoutHeaderBtn].forEach(button => button.addEventListener('click',async () => {
+=======
+signoutHeaderBtn.addEventListener('click',async () => {
+>>>>>>> 27efe7101872defdb7f6dabe8a57888bcb2bc31c
   await supabase.auth.signOut();
   refreshSession();
-}));
+});
 photoInput.addEventListener('change', () => updatePhotoPreview(photoInput.files));
 nextStepBtn.addEventListener('click', () => {
   if(validateStep1()){
@@ -603,6 +705,69 @@ favoritesList.addEventListener('click', event => {
 });
 window.addEventListener('online', async () => { updateNetworkStatus(); await syncPending(); render(); });
 window.addEventListener('offline', updateNetworkStatus);
-supabase.auth.onAuthStateChange(() => refreshSession());
-refreshSession();
+supabase.auth.onAuthStateChange((event, session) => {
+  currentUserData = session?.user || null;
+  setUserState(currentUserData);
+  if(currentUserData){
+    fetchRemoteTasks().then(syncPending).then(render);
+  } else {
+    render();
+  }
+});
+// Limpa apenas caches e service workers no carregamento, preservando dados do app e sessão ativa.
+async function clearAppCacheOnLoad(){
+  // Atualiza estado de rede visível imediatamente
+  updateNetworkStatus();
+
+  // Desregistrar service workers
+  if('serviceWorker' in navigator){
+    try{
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }catch(err){ console.warn('Falha ao desregistrar service workers:', err); }
+  }
+
+  // Limpar Cache Storage
+  if('caches' in window){
+    try{
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }catch(err){ console.warn('Falha ao limpar caches:', err); }
+  }
+}
+
+async function resetAppCacheAndSession(){
+  await clearAppCacheOnLoad();
+
+  // Remover chaves locais relacionadas ao Supabase, preservando os dados do app
+  try{
+    const toRemove = [];
+    for(let i = 0; i < localStorage.length; i++){
+      const key = localStorage.key(i);
+      if(!key) continue;
+      if(key.includes('supabase') || key.startsWith('sb-') || key.includes('sb:') || key.includes('supabase.auth')){
+        toRemove.push(key);
+      }
+    }
+    toRemove.forEach(k => localStorage.removeItem(k));
+  }catch(err){ console.warn('Falha ao limpar localStorage:', err); }
+
+  // Tentar limpar sessão no Supabase (ignora falhas offline)
+  try{ await supabase.auth.signOut(); }catch(err){ console.warn('supabase.signOut falhou:', err); }
+
+  // Recarregar estado da sessão após limpeza
+  await refreshSession();
+}
+
+// Adiciona listener do botão manual para limpeza de cache/sessão
+if (resetCacheBtn) {
+  resetCacheBtn.addEventListener('click', async () => {
+    showMessage('Limpando cache e sessão...', 'info', 3000);
+    await resetAppCacheAndSession();
+    showMessage('Cache limpo e sessão reiniciada.', 'success', 3000);
+  });
+}
+
+// Executa limpeza leve na inicialização para evitar service workers/caches antigos
+clearAppCacheOnLoad();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js');}

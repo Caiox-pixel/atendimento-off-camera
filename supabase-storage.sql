@@ -1,6 +1,6 @@
 -- Arquivo: supabase-storage.sql
 -- Cria tabela de metadados para imagens armazenadas no bucket de Storage
--- Ajuste o nome do bucket no frontend para corresponder (ex: tarefas-photos)
+-- Ajuste o nome do bucket no frontend para corresponder (ex: images)
 
 CREATE TABLE IF NOT EXISTS public.fotos (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -45,6 +45,8 @@ CREATE POLICY "deletar_para_proprietario" ON public.fotos
 --   ADD CONSTRAINT fotos_tarefas_fkey FOREIGN KEY (tarefa_id) REFERENCES public.tarefas(id) ON DELETE CASCADE;
 
 -- Observações:
--- - Depois de criar o bucket (ex: `tarefas-photos`) no painel Supabase Storage,
+-- - Depois de criar o bucket (ex: `images`) no painel Supabase Storage,
 --   o frontend deve enviar os blobs para esse bucket e armazenar o `storage_path` e `public_url` nesta tabela
 -- - Você pode optar por gerar URLs assinadas no backend ou frontend usando os métodos da API de Storage
+
+
